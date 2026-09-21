@@ -1,0 +1,6 @@
+{
+  "name": "فرحة | حجز وتنظيم المناسبات",
+  "description": "المنصة الأولى في العراق لحجز وتنسيق حفلات أعياد الميلاد، حفلات الختان (الطهور)، حفلات التخرج، وتزيين سيارات المناسبات بأحدث الديكورات والإضاءات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
