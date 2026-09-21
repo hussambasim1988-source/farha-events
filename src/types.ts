@@ -30,6 +30,15 @@ export interface AddOnService {
   iconName: string;
 }
 
+export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
+
+export interface BookingReview {
+  rating: number; // 1 to 5
+  comment: string;
+  tags?: string[];
+  createdAt: string;
+}
+
 export interface BookingFormData {
   id: string;
   clientName: string;
@@ -49,7 +58,14 @@ export interface BookingFormData {
   specialNotes: string;
   totalEstimatedPrice: number;
   createdAt: string;
-  status: 'pending' | 'confirmed' | 'completed';
+  status: BookingStatus;
+  review?: BookingReview;
+}
+
+export interface PortfolioImage {
+  url: string;
+  caption: string;
+  tag?: string;
 }
 
 export interface PortfolioItem {
@@ -57,10 +73,14 @@ export interface PortfolioItem {
   title: string;
   category: EventCategory;
   imageUrl: string;
+  galleryImages?: PortfolioImage[];
   location: string;
   date: string;
   description: string;
   clientReviewSnippet?: string;
+  clientName?: string;
+  decorHighlights?: string[];
+  setupTime?: string;
 }
 
 export interface CustomerReview {
@@ -89,4 +109,21 @@ export interface FarhaAIChatMessage {
     item: string;
     cost: number;
   }[];
+}
+
+export type TaskPriority = 'high' | 'medium' | 'low';
+export type TaskStage = 'before_departure' | 'on_site_setup' | 'during_event' | 'after_event';
+
+export interface FieldTaskItem {
+  id: string;
+  bookingId: string;
+  title: string;
+  categoryTag: string; // e.g. "تجهيز الزينة", "الكيك والحلويات", "المؤثرات والإضاءة"
+  stage: TaskStage;
+  priority: TaskPriority;
+  completed: boolean;
+  completedAt?: string;
+  assignedRole: string; // e.g. "فريق الديكور", "مسؤول التوصيل", "فني الإضاءة"
+  isCustom?: boolean;
+  notes?: string;
 }

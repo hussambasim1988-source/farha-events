@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calculator, 
   X, 
@@ -12,15 +12,21 @@ import {
   Users, 
   Info,
   CheckCircle2,
+  AlertTriangle,
+  TrendingUp,
   Cake,
   Crown,
   GraduationCap,
   Car,
   HeartHandshake,
-  Baby
+  Baby,
+  Clock,
+  Flame,
+  Tag
 } from 'lucide-react';
 import { EVENT_CATEGORIES, SERVICE_PACKAGES, ADD_ON_SERVICES, IRAQ_GOVERNORATES } from '../data/farhaData';
 import { EventCategory, ServicePackage, AddOnService } from '../types';
+import { analyzeSeasonalDate, SeasonalAnalysis } from '../utils/seasonalPricing';
 
 interface InteractiveCostCalculatorProps {
   isOpen: boolean;
@@ -33,6 +39,9 @@ interface InteractiveCostCalculatorProps {
     city: string;
     totalPrice: number;
     guestsCount: number;
+    eventDate?: string;
+    isPeakSeason?: boolean;
+    seasonalSurge?: number;
   }) => void;
 }
 
@@ -54,7 +63,7 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
   );
 
   // Update selected package when category changes
-  React.useEffect(() => {
+  useEffect(() => {
     const pkgs = SERVICE_PACKAGES.filter(p => p.category === selectedCategory);
     if (pkgs.length > 0) {
       setSelectedPackageId(pkgs[0].id);
@@ -64,6 +73,18 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([]);
   const [selectedCity, setSelectedCity] = useState<string>('بغداد');
   const [guestsCount, setGuestsCount] = useState<number>(25);
+
+  // Booking Date for Seasonal Cost Forecast
+  const [bookingDate, setBookingDate] = useState<string>(() => {
+    // Default to the upcoming Friday to showcase the seasonal engine or 3 days ahead
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return d.toISOString().split('T')[0];
+  });
+
+  const seasonalInfo: SeasonalAnalysis = useMemo(() => {
+    return analyzeSeasonalDate(bookingDate);
+  }, [bookingDate]);
 
   const currentPackage = useMemo(() => {
     return SERVICE_PACKAGES.find(p => p.id === selectedPackageId) || categoryPackages[0];
@@ -79,36 +100,64 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
     return ADD_ON_SERVICES.filter(a => selectedAddOnIds.includes(a.id));
   }, [selectedAddOnIds]);
 
-  const totalPrice = useMemo(() => {
+  // Base Subtotal (Package + Selected Addons)
+  const baseSubtotal = useMemo(() => {
     const pkgPrice = currentPackage ? currentPackage.price : 0;
     const addOnsTotal = selectedAddOnsList.reduce((sum, item) => sum + item.price, 0);
     return pkgPrice + addOnsTotal;
   }, [currentPackage, selectedAddOnsList]);
 
+  // 15% Seasonal surge if peak (Weekend or Holiday)
+  const seasonalSurgeAmount = useMemo(() => {
+    return seasonalInfo.isPeak ? Math.round(baseSubtotal * 0.15) : 0;
+  }, [baseSubtotal, seasonalInfo.isPeak]);
+
+  // Final Total Price
+  const totalPrice = useMemo(() => {
+    return baseSubtotal + seasonalSurgeAmount;
+  }, [baseSubtotal, seasonalSurgeAmount]);
+
   const formatIQD = (amount: number) => {
     return new Intl.NumberFormat('ar-IQ').format(amount) + ' د.ع';
+  };
+
+  // Quick preset helper
+  const setQuickDate = (targetDayOfWeek: number) => {
+    const d = new Date();
+    const current = d.getDay();
+    let diff = targetDayOfWeek - current;
+    if (diff <= 0) diff += 7;
+    d.setDate(d.getDate() + diff);
+    setBookingDate(d.toISOString().split('T')[0]);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200" dir="rtl">
       <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-rose-100 overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Header */}
         <div className="px-6 py-5 bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shadow-inner">
               <Calculator className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-black">حاسبة كلفة المناسبات التفاعلية</h2>
-              <p className="text-xs text-rose-100">احسب تكلفة الباقة والمؤثرات الإضافية بدقة وشفافية بالدينار العراقي</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black">حاسبة كلفة المناسبات التفاعلية</h2>
+                <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                  <Flame className="w-3 h-3 text-rose-600 fill-rose-600" />
+                  <span>توقعات الموسم الذكية</span>
+                </span>
+              </div>
+              <p className="text-xs text-rose-100">احسب تكلفة الباقة والمؤثرات الإضافية وتوقعات الذروة الموسمية بدقة وشفافية بالدينار العراقي</p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors cursor-pointer"
+            title="إغلاق"
           >
             <X className="w-5 h-5" />
           </button>
@@ -198,7 +247,7 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
                 <span>3. خدمات وإضافات مميزة (اختياري):</span>
                 <span className="text-[11px] font-normal text-rose-600">اختر ما يناسب رغبتك</span>
               </label>
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {ADD_ON_SERVICES.map(addon => {
                   const isSelected = selectedAddOnIds.includes(addon.id);
                   return (
@@ -231,7 +280,114 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
               </div>
             </div>
 
-            {/* Step 4: City & Guests */}
+            {/* Step 4: Booking Date & Seasonal Cost Forecast (الميزة المطلوبة) */}
+            <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/90 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-rose-600" />
+                  <span>4. تاريخ المناسبة وتوقعات التكلفة الموسمية:</span>
+                </label>
+                <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                  seasonalInfo.isPeak
+                    ? 'bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
+                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}>
+                  {seasonalInfo.badgeLabel}
+                </span>
+              </div>
+
+              {/* Date Input with day badge */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                <div className="sm:col-span-7">
+                  <input
+                    type="date"
+                    value={bookingDate}
+                    onChange={(e) => setBookingDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 focus:outline-rose-500 focus:ring-1 focus:ring-rose-400"
+                  />
+                </div>
+                <div className="sm:col-span-5 bg-white rounded-xl p-2 border border-slate-200 text-center">
+                  <span className="text-[11px] text-slate-500 block">يوافق تاريخياً:</span>
+                  <span className="text-xs font-black text-slate-900 flex items-center justify-center gap-1">
+                    <span>يوم {seasonalInfo.dayName}</span>
+                    {seasonalInfo.isPeak && <span className="text-amber-500">⚡</span>}
+                  </span>
+                </div>
+              </div>
+
+              {/* Quick Simulation Chips to test weekends & holidays instantly */}
+              <div className="flex items-center flex-wrap gap-1.5 pt-1">
+                <span className="text-[10px] text-slate-500 font-bold">اختبار سريع:</span>
+                <button
+                  type="button"
+                  onClick={() => setQuickDate(5)}
+                  className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-bold cursor-pointer transition-colors"
+                >
+                  ⚡ الجمعة (نهاية أسبوع)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickDate(6)}
+                  className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-bold cursor-pointer transition-colors"
+                >
+                  ⚡ السبت (نهاية أسبوع)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickDate(3)}
+                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold cursor-pointer transition-colors"
+                >
+                  🌿 الأربعاء (يوم اعتيادي)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBookingDate('2026-10-03')}
+                  className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-bold cursor-pointer transition-colors"
+                >
+                  🇮🇶 3 تشرين (اليوم الوطني)
+                </button>
+              </div>
+
+              {/* Seasonal Forecast Notification Banner */}
+              {seasonalInfo.isPeak ? (
+                <div className="bg-gradient-to-l from-amber-50 via-amber-50/80 to-rose-50/60 border border-amber-300 rounded-xl p-3 text-amber-950 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-black text-xs text-amber-900">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>{seasonalInfo.alertTitle}</span>
+                    </div>
+                    <span className="text-[10px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-md shadow-2xs shrink-0">
+                      +15% زيادة تلقائية
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    {seasonalInfo.alertMessage}
+                  </p>
+                  <div className="pt-1.5 border-t border-amber-200/80 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-600">قيمة الزيادة التقديرية المضافة (+15%):</span>
+                    <span className="font-black text-amber-900 font-mono">
+                      +{formatIQD(seasonalSurgeAmount)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 text-emerald-900 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <span className="font-black text-xs block text-emerald-900">سعر اعتيادي قياسي (0% زيادة)</span>
+                      <span className="text-[10px] text-emerald-700">التاريخ يوافق يوماً عادياً خلال الأسبوع بدون أي رسوم ذروة موسمية.</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
+                    أوفر سعر 🌿
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Step 5: City & Guests */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
@@ -306,6 +462,39 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
                   </div>
                 ))}
 
+                {/* Subtotal line before seasonal adjustment */}
+                <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-slate-600">
+                  <span className="font-bold">المجموع الأساسي (الباقة + الإضافات):</span>
+                  <span className="font-mono font-bold text-slate-800">{formatIQD(baseSubtotal)}</span>
+                </div>
+
+                {/* Seasonal Surge Line Item (الميزة المطلوبة) */}
+                <div className={`p-2 rounded-xl border flex items-center justify-between transition-colors ${
+                  seasonalInfo.isPeak
+                    ? 'bg-amber-50 border-amber-300 text-amber-950 font-bold'
+                    : 'bg-emerald-50/50 border-emerald-200 text-emerald-900'
+                }`}>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1">
+                      {seasonalInfo.isPeak ? (
+                        <Flame className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      )}
+                      <span className="text-xs">
+                        {seasonalInfo.isPeak ? 'زيادة موسمية (+15% عطلات / ذروة)' : 'تسعير موسمي اعتيادي (0%)'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 block">
+                      {seasonalInfo.holidayName ? seasonalInfo.holidayName : `يوافق ${seasonalInfo.dayName}`}
+                    </span>
+                  </div>
+
+                  <span className={`font-black ${seasonalInfo.isPeak ? 'text-amber-700' : 'text-emerald-700'}`}>
+                    {seasonalInfo.isPeak ? `+${formatIQD(seasonalSurgeAmount)}` : '0 د.ع'}
+                  </span>
+                </div>
+
                 {/* Free inclusions */}
                 <div className="pt-2 border-t border-slate-200/80 space-y-1 text-[11px] text-emerald-700">
                   <div className="flex justify-between">
@@ -313,7 +502,7 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
                     <span className="font-bold">مجاناً</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>• كادر التنسيق الموقعي</span>
+                    <span>• كادر التنسيق الموقعي المتخصص</span>
                     <span className="font-bold">مشـمول</span>
                   </div>
                 </div>
@@ -323,7 +512,12 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
             {/* Total Price Box & Proceed Button */}
             <div className="pt-4 border-t border-slate-200">
               <div className="flex items-baseline justify-between mb-4">
-                <span className="text-xs font-bold text-slate-600">المجموع الكلي التقديري:</span>
+                <div>
+                  <span className="text-xs font-bold text-slate-600 block">المجموع الكلي التقديري:</span>
+                  {seasonalInfo.isPeak && (
+                    <span className="text-[10px] text-amber-700 font-bold">شامل الزيادة الموسمية (+15%)</span>
+                  )}
+                </div>
                 <span className="text-2xl font-black text-rose-600">
                   {formatIQD(totalPrice)}
                 </span>
@@ -339,7 +533,10 @@ export const InteractiveCostCalculator: React.FC<InteractiveCostCalculatorProps>
                       selectedAddOns: selectedAddOnsList,
                       city: selectedCity,
                       totalPrice: totalPrice,
-                      guestsCount: guestsCount
+                      guestsCount: guestsCount,
+                      eventDate: bookingDate,
+                      isPeakSeason: seasonalInfo.isPeak,
+                      seasonalSurge: seasonalSurgeAmount
                     });
                   }
                 }}

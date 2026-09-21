@@ -10,11 +10,15 @@ import { CustomerReviewsSection } from './components/CustomerReviewsSection';
 import { MyBookingsModal } from './components/MyBookingsModal';
 import { FarhaFooter } from './components/FarhaFooter';
 import { SourceCodeModal } from './components/SourceCodeModal';
+import { ToastContainer, ToastItem } from './components/ToastNotification';
+import { InAppNotification } from './components/NotificationBell';
 import { 
   EventCategory, 
   ServicePackage, 
   AddOnService, 
-  BookingFormData 
+  BookingFormData,
+  BookingStatus,
+  BookingReview
 } from './types';
 import { SERVICE_PACKAGES } from './data/farhaData';
 import { MessageCircle, Bot, Sparkles, Code2, Download } from 'lucide-react';
@@ -29,11 +33,25 @@ export function App() {
   const [isMyBookingsOpen, setIsMyBookingsOpen] = useState(false);
   const [isSourceCodeOpen, setIsSourceCodeOpen] = useState(false);
 
+  // In-app Toasts & Notifications
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [notifications, setNotifications] = useState<InAppNotification[]>(() => [
+    {
+      id: 'notif-welcome',
+      title: 'مرحباً بك في منصة فرحة',
+      message: 'تم تفعيل نظام الإشعارات الفورية (Toast) لمتابعة تأكيد الحجوزات والمواعيد.',
+      type: 'info',
+      timestamp: 'الآن',
+      isRead: false,
+    },
+  ]);
+
   // Selected package and add-ons for booking modal
   const [bookingPackage, setBookingPackage] = useState<ServicePackage | null>(null);
   const [bookingAddOns, setBookingAddOns] = useState<AddOnService[]>([]);
   const [bookingCity, setBookingCity] = useState<string>('بغداد');
   const [bookingGuestsCount, setBookingGuestsCount] = useState<number>(25);
+  const [bookingEventDate, setBookingEventDate] = useState<string>('');
 
   // Saved bookings in local storage
   const [bookings, setBookings] = useState<BookingFormData[]>(() => {
@@ -45,7 +63,7 @@ export function App() {
     } catch (e) {
       console.warn('Failed to load bookings from storage', e);
     }
-    // Initial sample booking to show user
+    // Initial sample bookings to show user on calendar (including pending to test transition!)
     return [
       {
         id: 'FARHA-IQ-92841',
@@ -64,7 +82,50 @@ export function App() {
         specialNotes: 'يرجى إحضار مهرج مرح مع المسابقات للأطفال',
         totalEstimatedPrice: 485000,
         createdAt: new Date().toISOString(),
+        status: 'pending' // pending so user can easily test transition to confirmed!
+      },
+      {
+        id: 'FARHA-IQ-92842',
+        clientName: 'د. مروة العبيدي',
+        phone: '07712345678',
+        city: 'بغداد',
+        addressDetails: 'حي الجامعة - قاعة ريحانة للاحتفالات',
+        eventType: 'wedding',
+        packageId: 'wed-royal',
+        eventDate: '2026-09-24',
+        eventTime: '07:30 مساءً',
+        guestsCount: 150,
+        selectedAddOnIds: ['addon-photo', 'addon-cake', 'addon-dj'],
+        customThemeColors: 'أبيض لؤلؤي وذهبي إيطالي',
+        specialNotes: 'كوشة ملكية فخمة مع إضاءة خافتة رومانسية',
+        totalEstimatedPrice: 950000,
+        createdAt: new Date().toISOString(),
         status: 'confirmed'
+      },
+      {
+        id: 'FARHA-IQ-92843',
+        clientName: 'م. سيف الدين كريم',
+        phone: '07809876543',
+        city: 'بغداد',
+        addressDetails: 'الجادرية - قاعة النادي الملكي',
+        eventType: 'graduation',
+        packageId: 'grad-vip',
+        eventDate: '2026-10-02',
+        eventTime: '05:00 مساءً',
+        guestsCount: 80,
+        selectedAddOnIds: ['addon-photo', 'addon-sparklers'],
+        customThemeColors: 'أسود وبرونزي مع شعار الكلية',
+        universityCollege: 'جامعة بغداد - كلية الهندسة',
+        specialNotes: 'تنسيق قبعات التخرج وتصوير جوي بالدرون',
+        totalEstimatedPrice: 520000,
+        createdAt: new Date().toISOString(),
+        status: 'completed',
+        review: {
+          rating: 5,
+          comment: 'ألف شكر لفريق فرحة، التنسيق كان قمة في الروعة والتنظيم والتصوير الجوي كان مفاجأة أذهلت كل الحضور!',
+          tags: ['✨ ديكور مبهر وفخم', '⏱️ التزام دقيق بالوقت', '🤝 كادر محترف ولطيف'],
+          createdAt: '2026-09-18'
+        }
       }
     ];
   });
@@ -77,10 +138,53 @@ export function App() {
     }
   }, [bookings]);
 
+  // Toast trigger helper
+  const triggerToast = (toastData: Omit<ToastItem, 'id' | 'timestamp'>) => {
+    const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+    const timestamp = new Date().toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+    const newToast: ToastItem = {
+      ...toastData,
+      id,
+      timestamp,
+    };
+
+    setToasts((prev) => [newToast, ...prev]);
+
+    setNotifications((prev) => [
+      {
+        id,
+        title: newToast.title,
+        message: newToast.message,
+        type: newToast.type,
+        timestamp,
+        isRead: false,
+        bookingId: newToast.bookingId,
+      },
+      ...prev,
+    ]);
+  };
+
+  const handleDismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleMarkAllNotificationsAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  };
+
+  const handleClearAllNotifications = () => {
+    setNotifications([]);
+  };
+
+  const handleSelectBookingNotification = (bookingId: string) => {
+    setIsMyBookingsOpen(true);
+  };
+
   // Handler when user clicks "احجز هذه الباقة" from package card
   const handleBookPackage = (pkg: ServicePackage) => {
     setBookingPackage(pkg);
     setBookingAddOns([]);
+    setBookingEventDate('');
     setIsBookingModalOpen(true);
   };
 
@@ -92,26 +196,121 @@ export function App() {
     city: string;
     totalPrice: number;
     guestsCount: number;
+    eventDate?: string;
+    isPeakSeason?: boolean;
+    seasonalSurge?: number;
   }) => {
     setIsCalculatorOpen(false);
     setBookingPackage(data.packageItem);
     setBookingAddOns(data.selectedAddOns);
     setBookingCity(data.city);
     setBookingGuestsCount(data.guestsCount);
+    if (data.eventDate) {
+      setBookingEventDate(data.eventDate);
+    }
     setIsBookingModalOpen(true);
   };
 
   const handleBookingSuccess = (newBooking: BookingFormData) => {
-    setBookings(prev => [newBooking, ...prev]);
+    setBookings((prev) => [newBooking, ...prev]);
+    triggerToast({
+      type: 'info',
+      title: 'تم استلام طلب الحجز بنجاح 📋',
+      message: `حجزك باسم "${newBooking.clientName}" برقم (${newBooking.id}) قيد المراجعة والتدقيق وسنتواصل معك قريباً لتأكيده.`,
+      bookingId: newBooking.id,
+      actionLabel: 'متابعة حجوزاتي',
+      onAction: () => setIsMyBookingsOpen(true),
+      duration: 5500,
+    });
   };
 
   const handleDeleteBooking = (id: string) => {
-    setBookings(prev => prev.filter(b => b.id !== id));
+    setBookings((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  // Immediate Alert System for Status Change (specifically pending -> confirmed)
+  const handleUpdateBookingStatus = (id: string, newStatus: BookingStatus) => {
+    const currentBooking = bookings.find((b) => b.id === id);
+    const oldStatus = currentBooking?.status || 'pending';
+
+    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: newStatus } : b)));
+
+    if (!currentBooking) return;
+
+    const clientName = currentBooking.clientName || 'العميل';
+    const eventDate = currentBooking.eventDate || 'المحدد';
+
+    // Requirement: Immediate Toast Alert when status changes from 'pending' to 'confirmed'
+    if (oldStatus === 'pending' && newStatus === 'confirmed') {
+      triggerToast({
+        type: 'celebration',
+        title: 'تهانينا! تم تأكيد الحجز بنجاح 🎉',
+        message: `تم تثبيت موعد حجز "${clientName}" لتاريخ (${eventDate}) وأصبح الآن مؤكداً وجاهزاً لتجهيز الكادر الميداني!`,
+        bookingId: id,
+        actionLabel: 'استعراض في التقويم 📅',
+        onAction: () => setIsMyBookingsOpen(true),
+        duration: 6500,
+      });
+    } else if (newStatus === 'confirmed') {
+      triggerToast({
+        type: 'celebration',
+        title: 'تم تأكيد الحجز بنجاح 🎉',
+        message: `حجز "${clientName}" برقم (${id}) أصبح مؤكداً في جدول المواعيد.`,
+        bookingId: id,
+        actionLabel: 'فتح التقويم',
+        onAction: () => setIsMyBookingsOpen(true),
+        duration: 6000,
+      });
+    } else if (newStatus === 'completed') {
+      triggerToast({
+        type: 'celebration',
+        title: 'اكتمل الحفل بنجاح ✨ شاركنا تقييمك ورأيك!',
+        message: `تم وسم حجز "${clientName}" كمكتمل. نسعد جداً بتلقي تقييمك لجودة الخدمة والكادر!`,
+        bookingId: id,
+        actionLabel: 'تقييم الخدمة ⭐',
+        onAction: () => setIsMyBookingsOpen(true),
+        duration: 7000,
+      });
+    } else if (newStatus === 'cancelled') {
+      triggerToast({
+        type: 'warning',
+        title: 'تم إلغاء الحجز ⚠️',
+        message: `تم إلغاء طلب حجز "${clientName}". يمكنك إعادة جدولته أو تغييره في أي وقت.`,
+        bookingId: id,
+        duration: 5000,
+      });
+    } else if (newStatus === 'pending') {
+      triggerToast({
+        type: 'info',
+        title: 'الحجز قيد المراجعة ⏳',
+        message: `تمت إعادة حجز "${clientName}" إلى قائمة المراجعة والتدقيق.`,
+        bookingId: id,
+        actionLabel: 'تفاصيل الحجز',
+        onAction: () => setIsMyBookingsOpen(true),
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleSaveBookingReview = (bookingId: string, review: BookingReview) => {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, review } : b))
+    );
+    triggerToast({
+      type: 'celebration',
+      title: 'شكراً جزيلاً لتقييمك الغالي! ⭐',
+      message: `تم تسجيل تقييمك (${review.rating}/5 نجوم) بنجاح لحجز #${bookingId}. رأيك وسام فخر لفريق فرحة.`,
+      bookingId,
+      duration: 5500,
+    });
   };
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col font-sans selection:bg-rose-500 selection:text-white" dir="rtl">
       
+      {/* Global In-App Toast Notification System */}
+      <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+
       {/* Top Quick Bar with Direct ZIP Download and Code Viewer */}
       <div className="bg-slate-950 text-white text-xs py-2 px-3 sm:px-4 border-b border-slate-800">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 flex-wrap">
@@ -139,7 +338,7 @@ export function App() {
         </div>
       </div>
 
-      {/* Top Navbar */}
+      {/* Top Navbar with Real-time Notification Bell */}
       <FarhaNavbar
         onOpenCalculator={() => setIsCalculatorOpen(true)}
         onOpenAIPlanner={() => setIsAIPlannerOpen(true)}
@@ -147,6 +346,10 @@ export function App() {
         onOpenSourceCode={() => setIsSourceCodeOpen(true)}
         onSelectCategory={(catId) => setSelectedCategory(catId as EventCategory)}
         bookingsCount={bookings.length}
+        notifications={notifications}
+        onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+        onClearAllNotifications={handleClearAllNotifications}
+        onSelectBookingNotification={handleSelectBookingNotification}
       />
 
       {/* Main Page Sections */}
@@ -238,6 +441,7 @@ export function App() {
         selectedAddOns={bookingAddOns}
         initialCity={bookingCity}
         initialGuestsCount={bookingGuestsCount}
+        initialEventDate={bookingEventDate}
         onBookingSuccess={handleBookingSuccess}
       />
 
@@ -254,6 +458,8 @@ export function App() {
         onClose={() => setIsMyBookingsOpen(false)}
         bookings={bookings}
         onDeleteBooking={handleDeleteBooking}
+        onUpdateStatus={handleUpdateBookingStatus}
+        onSaveReview={handleSaveBookingReview}
       />
 
     </div>

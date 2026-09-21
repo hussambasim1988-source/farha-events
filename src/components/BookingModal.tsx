@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { IRAQ_GOVERNORATES } from '../data/farhaData';
 import { EventCategory, ServicePackage, AddOnService, BookingFormData } from '../types';
+import { analyzeSeasonalDate } from '../utils/seasonalPricing';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ interface BookingModalProps {
   selectedAddOns: AddOnService[];
   initialCity?: string;
   initialGuestsCount?: number;
+  initialEventDate?: string;
   onBookingSuccess: (booking: BookingFormData) => void;
 }
 
@@ -35,6 +37,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   selectedAddOns,
   initialCity = 'بغداد',
   initialGuestsCount = 25,
+  initialEventDate,
   onBookingSuccess
 }) => {
   const [clientName, setClientName] = useState('');
@@ -43,11 +46,19 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [district, setDistrict] = useState('');
   const [addressDetails, setAddressDetails] = useState('');
   const [eventDate, setEventDate] = useState(() => {
-    // Default to 3 days from now
+    if (initialEventDate) return initialEventDate;
     const d = new Date();
     d.setDate(d.getDate() + 3);
     return d.toISOString().split('T')[0];
   });
+
+  // Synchronize when initialEventDate changes
+  React.useEffect(() => {
+    if (initialEventDate) {
+      setEventDate(initialEventDate);
+    }
+  }, [initialEventDate]);
+
   const [eventTime, setEventTime] = useState('06:00 مساءً');
   const [specialNotes, setSpecialNotes] = useState('');
   const [customColors, setCustomColors] = useState('ذهبي وأبيض عاجي');
@@ -58,9 +69,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   if (!isOpen || !packageItem) return null;
 
+  const seasonalInfo = analyzeSeasonalDate(eventDate);
   const currentGov = IRAQ_GOVERNORATES.find(g => g.name === city) || IRAQ_GOVERNORATES[0];
   const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
-  const totalEstimated = packageItem.price + addOnsTotal;
+  const baseSubtotal = packageItem.price + addOnsTotal;
+  const seasonalSurge = seasonalInfo.isPeak ? Math.round(baseSubtotal * 0.15) : 0;
+  const totalEstimated = baseSubtotal + seasonalSurge;
 
   const formatIQD = (amount: number) => {
     return new Intl.NumberFormat('ar-IQ').format(amount) + ' د.ع';
@@ -123,7 +137,7 @@ ${celebrantName ? `👑 *اسم صاحب المناسبة*: ${celebrantName}\n` 
 ${selectedAddOns.length > 0 ? selectedAddOns.map(a => `   - ${a.name} (${formatIQD(a.price)})`).join('\n') : '   - بدون إضافات'}
 📝 *ملاحظات خاصة*: ${specialNotes || 'لا توجد'}
 ----------------------------------------
-💰 *المجموع التقديري*: ${formatIQD(totalEstimated)}
+💰 *المجموع التقديري*: ${formatIQD(totalEstimated)}${seasonalInfo.isPeak ? ` (شامل الزيادة الموسمية +15% - ${seasonalInfo.holidayName || `عطلة ${seasonalInfo.dayName}`})` : ''}
 (شامل التوصيل والتنسيق والتركيب في الموقع)
 ----------------------------------------
 أرجو التواصل لتأكيد التفاصيل النهائية. شكراً لكم!`;
@@ -237,9 +251,21 @@ ${selectedAddOns.length > 0 ? selectedAddOns.map(a => `   - ${a.name} (${formatI
                     + {selectedAddOns.length} خدمات إضافية ({selectedAddOns.map(a => a.name).join('، ')})
                   </div>
                 )}
+                {seasonalInfo.isPeak && (
+                  <div className="text-[11px] text-amber-700 font-bold flex items-center gap-1 mt-0.5">
+                    <span>⚡ تشمل زيادة موسمية +15% ({seasonalInfo.holidayName || `عطلة ${seasonalInfo.dayName}`})</span>
+                  </div>
+                )}
               </div>
-              <div className="text-left font-black text-rose-600 text-lg">
-                {formatIQD(totalEstimated)}
+              <div className="text-left">
+                <div className="font-black text-rose-600 text-lg">
+                  {formatIQD(totalEstimated)}
+                </div>
+                {seasonalInfo.isPeak && (
+                  <span className="text-[10px] text-amber-600 font-bold block text-left">
+                    (+{formatIQD(seasonalSurge)})
+                  </span>
+                )}
               </div>
             </div>
 
@@ -342,6 +368,15 @@ ${selectedAddOns.length > 0 ? selectedAddOns.map(a => `   - ${a.name} (${formatI
                   onChange={(e) => setEventDate(e.target.value)}
                   className="w-full text-xs bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-rose-500"
                 />
+                {seasonalInfo.isPeak ? (
+                  <div className="text-[10px] text-amber-700 font-bold flex items-center gap-1 mt-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    <span>⚡ موسم ذروة (+15%): {seasonalInfo.holidayName || `عطلة ${seasonalInfo.dayName}`}</span>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-emerald-700 font-medium flex items-center gap-1 mt-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    <span>🌿 يوم اعتيادي: تسعير قياسي (0% زيادة)</span>
+                  </div>
+                )}
               </div>
 
               <div>

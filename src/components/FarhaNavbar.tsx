@@ -7,10 +7,11 @@ import {
   MessageCircle, 
   CalendarCheck, 
   PhoneCall, 
-  Bot,
-  Download,
-  Code2
+  Bot, 
+  Download, 
+  Code2 
 } from 'lucide-react';
+import { NotificationBell, InAppNotification } from './NotificationBell';
 
 interface FarhaNavbarProps {
   onOpenCalculator: () => void;
@@ -19,6 +20,10 @@ interface FarhaNavbarProps {
   onOpenSourceCode?: () => void;
   onSelectCategory: (catId: string) => void;
   bookingsCount: number;
+  notifications?: InAppNotification[];
+  onMarkAllAsRead?: () => void;
+  onClearAllNotifications?: () => void;
+  onSelectBookingNotification?: (bookingId: string) => void;
 }
 
 export const FarhaNavbar: React.FC<FarhaNavbarProps> = ({
@@ -27,6 +32,10 @@ export const FarhaNavbar: React.FC<FarhaNavbarProps> = ({
   onOpenMyBookings,
   onOpenSourceCode,
   bookingsCount,
+  notifications = [],
+  onMarkAllAsRead = () => {},
+  onClearAllNotifications = () => {},
+  onSelectBookingNotification,
 }) => {
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -136,6 +145,14 @@ export const FarhaNavbar: React.FC<FarhaNavbarProps> = ({
               <Download className="w-3.5 h-3.5 text-slate-950" />
               <span>تحميل ZIP</span>
             </a>
+
+            {/* In-app Notifications Bell */}
+            <NotificationBell
+              notifications={notifications}
+              onMarkAllAsRead={onMarkAllAsRead}
+              onClearAll={onClearAllNotifications}
+              onSelectBookingNotification={onSelectBookingNotification}
+            />
 
             {/* My Bookings Button */}
             <button
