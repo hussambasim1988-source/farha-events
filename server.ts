@@ -1,8 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-// @ts-ignore
-import archiver from "archiver";
+import JSZip from "jszip";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -15,21 +14,9 @@ const PORT = 3000;
 app.use(express.json());
 
 // Direct ZIP download of the complete Farha codebase
-app.get("/api/download-zip", (req, res) => {
+app.get("/api/download-zip", async (req, res) => {
   try {
-    const archive = archiver("zip", { zlib: { level: 9 } });
-
-    res.attachment("farha-events-iraq.zip");
-
-    archive.on("error", (err) => {
-      console.error("Archive error:", err);
-      if (!res.headersSent) {
-        res.status(500).send("Error creating zip archive");
-      }
-    });
-
-    archive.pipe(res);
-
+    const zip = new JSZip();
     const rootDir = process.cwd();
     const ignoreDirs = new Set(["node_modules", "dist", ".git", ".cache", ".npm"]);
 
@@ -43,13 +30,31 @@ app.get("/api/download-zip", (req, res) => {
         if (entry.isDirectory()) {
           addDirectory(fullPath, archivePath);
         } else if (entry.isFile()) {
-          archive.file(fullPath, { name: archivePath });
+          try {
+            const data = fs.readFileSync(fullPath);
+            zip.file(archivePath, data);
+          } catch (e) {
+            console.warn(`Could not read file ${fullPath}:`, e);
+          }
         }
       }
     }
 
     addDirectory(rootDir);
-    archive.finalize();
+
+    const buffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+
+    res.set({
+      "Content-Type": "application/zip",
+      "Content-Disposition": 'attachment; filename="farha-events-iraq.zip"',
+      "Content-Length": buffer.length.toString(),
+    });
+
+    res.send(buffer);
   } catch (err: any) {
     console.error("Failed to generate zip:", err);
     res.status(500).json({ error: "Failed to generate zip download" });
