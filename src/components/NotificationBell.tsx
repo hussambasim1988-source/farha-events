@@ -10,6 +10,7 @@ export interface InAppNotification {
   timestamp: string;
   isRead: boolean;
   bookingId?: string;
+  is24hReminder?: boolean;
 }
 
 interface NotificationBellProps {
@@ -139,15 +140,24 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
                     !notif.isRead ? 'bg-rose-50/30' : ''
                   }`}
                 >
-                  <div className="p-2 rounded-xl bg-slate-100 shrink-0 mt-0.5">
-                    {getIcon(notif.type)}
+                  <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                    notif.is24hReminder ? 'bg-amber-100 text-amber-700' : 'bg-slate-100'
+                  }`}>
+                    {notif.is24hReminder ? <Bell className="w-4 h-4 text-amber-600 animate-pulse" /> : getIcon(notif.type)}
                   </div>
 
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between gap-1">
-                      <h5 className="text-xs font-black text-slate-900">
-                        {notif.title}
-                      </h5>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h5 className="text-xs font-black text-slate-900">
+                          {notif.title}
+                        </h5>
+                        {notif.is24hReminder && (
+                          <span className="text-[9px] bg-amber-500 text-white font-black px-1.5 py-0.2 rounded-full">
+                            تذكير 24 ساعة
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] text-slate-400">
                         {notif.timestamp}
                       </span>

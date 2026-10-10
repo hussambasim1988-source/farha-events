@@ -7,9 +7,7 @@ import {
   MessageCircle, 
   CalendarCheck, 
   PhoneCall, 
-  Bot, 
-  Download, 
-  Code2 
+  Bot 
 } from 'lucide-react';
 import { NotificationBell, InAppNotification } from './NotificationBell';
 
@@ -17,9 +15,9 @@ interface FarhaNavbarProps {
   onOpenCalculator: () => void;
   onOpenAIPlanner: () => void;
   onOpenMyBookings: () => void;
-  onOpenSourceCode?: () => void;
   onSelectCategory: (catId: string) => void;
   bookingsCount: number;
+  hasUpcoming24hReminder?: boolean;
   notifications?: InAppNotification[];
   onMarkAllAsRead?: () => void;
   onClearAllNotifications?: () => void;
@@ -30,8 +28,8 @@ export const FarhaNavbar: React.FC<FarhaNavbarProps> = ({
   onOpenCalculator,
   onOpenAIPlanner,
   onOpenMyBookings,
-  onOpenSourceCode,
   bookingsCount,
+  hasUpcoming24hReminder = false,
   notifications = [],
   onMarkAllAsRead = () => {},
   onClearAllNotifications = () => {},
@@ -122,30 +120,6 @@ export const FarhaNavbar: React.FC<FarhaNavbarProps> = ({
 
           {/* Action CTAs */}
           <div className="flex items-center gap-1.5 sm:gap-2.5">
-            {/* View & Copy Code Modal Button */}
-            {onOpenSourceCode && (
-              <button
-                onClick={onOpenSourceCode}
-                className="bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all border border-slate-700 hover:border-amber-400 cursor-pointer"
-                title="عرض وتصفح ملفات الكود"
-              >
-                <Code2 className="w-4 h-4 text-amber-400" />
-                <span className="hidden sm:inline">عرض الكود</span>
-                <span className="sm:hidden">الكود</span>
-              </button>
-            )}
-
-            {/* Direct ZIP Download */}
-            <a
-              href="/api/download-zip"
-              download="farha-events-iraq.zip"
-              className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-3 sm:px-3.5 py-2 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-md transition-all hover:scale-105"
-              title="تحميل كود المشروع كاملاً ZIP"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-950" />
-              <span>تحميل ZIP</span>
-            </a>
-
             {/* In-app Notifications Bell */}
             <NotificationBell
               notifications={notifications}
@@ -158,12 +132,18 @@ export const FarhaNavbar: React.FC<FarhaNavbarProps> = ({
             <button
               onClick={onOpenMyBookings}
               title="حجوزاتي"
-              className="relative p-2.5 rounded-xl border border-slate-200 hover:border-rose-300 text-slate-700 hover:text-rose-600 hover:bg-rose-50/50 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+              className={`relative p-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
+                hasUpcoming24hReminder
+                  ? 'border-amber-400 bg-amber-50/80 text-amber-900 shadow-xs ring-2 ring-amber-300/60'
+                  : 'border-slate-200 hover:border-rose-300 text-slate-700 hover:text-rose-600 hover:bg-rose-50/50'
+              }`}
             >
-              <CalendarCheck className="w-4 h-4" />
+              <CalendarCheck className={`w-4 h-4 ${hasUpcoming24hReminder ? 'text-amber-600 animate-bounce' : ''}`} />
               <span className="hidden sm:inline">حجوزاتي</span>
               {bookingsCount > 0 && (
-                <span className="absolute -top-1.5 -left-1.5 bg-rose-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold shadow-xs">
+                <span className={`absolute -top-1.5 -left-1.5 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold shadow-xs ${
+                  hasUpcoming24hReminder ? 'bg-amber-600' : 'bg-rose-600'
+                }`}>
                   {bookingsCount}
                 </span>
               )}

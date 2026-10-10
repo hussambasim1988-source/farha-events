@@ -9,9 +9,9 @@ import { PortfolioGallery } from './components/PortfolioGallery';
 import { CustomerReviewsSection } from './components/CustomerReviewsSection';
 import { MyBookingsModal } from './components/MyBookingsModal';
 import { FarhaFooter } from './components/FarhaFooter';
-import { SourceCodeModal } from './components/SourceCodeModal';
 import { ToastContainer, ToastItem } from './components/ToastNotification';
 import { InAppNotification } from './components/NotificationBell';
+import { EventReminderBanner } from './components/EventReminderBanner';
 import { 
   EventCategory, 
   ServicePackage, 
@@ -21,9 +21,10 @@ import {
   BookingReview
 } from './types';
 import { SERVICE_PACKAGES } from './data/farhaData';
-import { MessageCircle, Bot, Sparkles, Code2, Download } from 'lucide-react';
+import { checkBookingReminder, ReminderCheckResult } from './utils/reminderService';
+import { MessageCircle, Bot, Sparkles, Bell } from 'lucide-react';
 
-const STORAGE_KEY_BOOKINGS = 'farha_iraq_bookings_v1';
+const STORAGE_KEY_BOOKINGS = 'farha_iraq_bookings_v2';
 
 export function App() {
   const [selectedCategory, setSelectedCategory] = useState<EventCategory>('birthday');
@@ -31,7 +32,9 @@ export function App() {
   const [isAIPlannerOpen, setIsAIPlannerOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isMyBookingsOpen, setIsMyBookingsOpen] = useState(false);
-  const [isSourceCodeOpen, setIsSourceCodeOpen] = useState(false);
+  const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<string | null>(null);
+  const [dismissed24hReminderIds, setDismissed24hReminderIds] = useState<string[]>([]);
+  const notified24hBookingsRef = React.useRef<Set<string>>(new Set());
 
   // In-app Toasts & Notifications
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -63,8 +66,37 @@ export function App() {
     } catch (e) {
       console.warn('Failed to load bookings from storage', e);
     }
-    // Initial sample bookings to show user on calendar (including pending to test transition!)
+    // Calculate dynamic dates: tomorrow (within 24h), plus other dates
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const formatYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const tomorrowStr = formatYMD(tomorrow);
+
+    // Initial sample bookings to show user on calendar (including a confirmed booking tomorrow within 24h!)
     return [
+      {
+        id: 'FARHA-IQ-92840',
+        clientName: 'سارة المهداوي',
+        phone: '07705544332',
+        city: 'بغداد',
+        addressDetails: 'الرصافة - الجادرية / قرب مجمع الوزراء',
+        eventType: 'birthday',
+        packageId: 'bday-silver',
+        eventDate: tomorrowStr,
+        eventTime: '06:00 مساءً',
+        guestsCount: 25,
+        selectedAddOnIds: ['addon-dj', 'addon-custom-cake'],
+        customThemeColors: 'وردي وأبيض لؤلؤي',
+        childNameAge: 'مريم (7 سنوات)',
+        specialNotes: 'يرجى الحضور قبل الموعد بساعتين لتجهيز قوس البالونات',
+        totalEstimatedPrice: 310000,
+        createdAt: new Date().toISOString(),
+        status: 'confirmed' // Confirmed and happening tomorrow within 24h!
+      },
       {
         id: 'FARHA-IQ-92841',
         clientName: 'أحمد السعدي',
@@ -137,6 +169,65 @@ export function App() {
       console.warn('Failed to persist bookings', e);
     }
   }, [bookings]);
+
+  // 24-Hour Automated Event Reminder Detection
+  const active24hReminders = React.useMemo(() => {
+    return bookings
+      .map(b => checkBookingReminder(b))
+      .filter((rem): rem is ReminderCheckResult => rem !== null && rem.isWithin24Hours)
+      .filter(rem => !dismissed24hReminderIds.includes(rem.booking.id));
+  }, [bookings, dismissed24hReminderIds]);
+
+  // Automated effect: trigger 24h notification toast for any booking entering the 24h window
+  useEffect(() => {
+    active24hReminders.forEach((rem) => {
+      const b = rem.booking;
+      if (!notified24hBookingsRef.current.has(b.id)) {
+        notified24hBookingsRef.current.add(b.id);
+
+        const timeMsg = rem.hoursRemaining > 0 
+          ? `أقل من ${rem.hoursRemaining} ساعة` 
+          : 'اليوم';
+
+        triggerToast({
+          type: 'warning',
+          title: `🔔 تذكير: موعد حفل ${b.clientName} خلال 24 ساعة!`,
+          message: `يقترب موعد الحفل (${b.eventDate} - ${b.eventTime}) خلال ${timeMsg}. تأكد من تجهيز معدات الباقة وتأكيد موقع الحفل في (${b.city}).`,
+          bookingId: b.id,
+          actionLabel: 'تفاصيل الحجز وجدول المهام',
+          onAction: () => {
+            setSelectedBookingForDetails(b.id);
+            setIsMyBookingsOpen(true);
+          },
+          duration: 9000,
+        });
+
+        // Also add special reminder to NotificationBell list
+        setNotifications((prev) => [
+          {
+            id: `rem-24h-${b.id}-${Date.now()}`,
+            title: `تذكير الجاهزية (24 ساعة): ${b.clientName}`,
+            message: `موعد الحفل يقترب خلال ${timeMsg} (${b.eventDate}). يرجى التحقق من قائمة المهام الميدانية والموقع.`,
+            type: 'warning',
+            timestamp: 'الآن',
+            isRead: false,
+            bookingId: b.id,
+            is24hReminder: true,
+          },
+          ...prev,
+        ]);
+      }
+    });
+  }, [active24hReminders]);
+
+  const handleDismissReminderBanner = (bookingId: string) => {
+    setDismissed24hReminderIds((prev) => [...prev, bookingId]);
+  };
+
+  const handleOpenBookingDetailsFromReminder = (bookingId: string) => {
+    setSelectedBookingForDetails(bookingId);
+    setIsMyBookingsOpen(true);
+  };
 
   // Toast trigger helper
   const triggerToast = (toastData: Omit<ToastItem, 'id' | 'timestamp'>) => {
@@ -311,41 +402,24 @@ export function App() {
       {/* Global In-App Toast Notification System */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
-      {/* Top Quick Bar with Direct ZIP Download and Code Viewer */}
-      <div className="bg-slate-950 text-white text-xs py-2 px-3 sm:px-4 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-slate-300 font-medium">منصة فرحة لتنظيم الحفلات والمناسبات بالعراق</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsSourceCodeOpen(true)}
-              className="bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold px-3 py-1 rounded-md text-xs inline-flex items-center gap-1.5 transition-all border border-slate-700 cursor-pointer"
-            >
-              <Code2 className="w-3.5 h-3.5 text-amber-400" />
-              <span>عرض ونسخ الأكواد</span>
-            </button>
-            <a
-              href="/api/download-zip"
-              download="farha-events-iraq.zip"
-              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black px-3 py-1 rounded-md text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-950" />
-              <span>تحميل الكود بالكامل (ZIP)</span>
-            </a>
-          </div>
-        </div>
-      </div>
+      {/* 24-Hour Automated Event Reminder Banner */}
+      <EventReminderBanner
+        reminders={active24hReminders}
+        onOpenBookingDetails={handleOpenBookingDetailsFromReminder}
+        onDismissReminder={handleDismissReminderBanner}
+      />
 
       {/* Top Navbar with Real-time Notification Bell */}
       <FarhaNavbar
         onOpenCalculator={() => setIsCalculatorOpen(true)}
         onOpenAIPlanner={() => setIsAIPlannerOpen(true)}
-        onOpenMyBookings={() => setIsMyBookingsOpen(true)}
-        onOpenSourceCode={() => setIsSourceCodeOpen(true)}
+        onOpenMyBookings={() => {
+          setSelectedBookingForDetails(null);
+          setIsMyBookingsOpen(true);
+        }}
         onSelectCategory={(catId) => setSelectedCategory(catId as EventCategory)}
         bookingsCount={bookings.length}
+        hasUpcoming24hReminder={active24hReminders.length > 0}
         notifications={notifications}
         onMarkAllAsRead={handleMarkAllNotificationsAsRead}
         onClearAllNotifications={handleClearAllNotifications}
@@ -387,17 +461,8 @@ export function App() {
       {/* Footer */}
       <FarhaFooter />
 
-      {/* Floating Action Buttons for quick WhatsApp, Code Viewer, and AI Planner */}
+      {/* Floating Action Buttons for quick WhatsApp and AI Planner */}
       <div className="fixed bottom-5 left-5 z-40 flex flex-col gap-2.5">
-        {/* Floating Source Code Button */}
-        <button
-          onClick={() => setIsSourceCodeOpen(true)}
-          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-950 hover:bg-slate-900 text-amber-400 border-2 border-amber-400 shadow-xl shadow-amber-400/20 flex items-center justify-center transition-all hover:scale-110 cursor-pointer"
-          title="عرض ونسخ كود المشروع أو تحميل ZIP"
-        >
-          <Code2 className="w-6 h-6 text-amber-400" />
-        </button>
-
         <button
           onClick={() => setIsAIPlannerOpen(true)}
           className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-xl shadow-purple-600/30 flex items-center justify-center transition-all hover:scale-110 cursor-pointer"
@@ -419,12 +484,6 @@ export function App() {
       </div>
 
       {/* Modals */}
-      {/* 0. Source Code Viewer & Downloader Modal */}
-      <SourceCodeModal
-        isOpen={isSourceCodeOpen}
-        onClose={() => setIsSourceCodeOpen(false)}
-      />
-
       {/* 1. Interactive Cost Calculator Modal */}
       <InteractiveCostCalculator
         isOpen={isCalculatorOpen}
@@ -455,8 +514,12 @@ export function App() {
       {/* 4. My Saved Bookings Modal */}
       <MyBookingsModal
         isOpen={isMyBookingsOpen}
-        onClose={() => setIsMyBookingsOpen(false)}
+        onClose={() => {
+          setIsMyBookingsOpen(false);
+          setSelectedBookingForDetails(null);
+        }}
         bookings={bookings}
+        initialBookingId={selectedBookingForDetails}
         onDeleteBooking={handleDeleteBooking}
         onUpdateStatus={handleUpdateBookingStatus}
         onSaveReview={handleSaveBookingReview}

@@ -30,7 +30,9 @@ import {
   Award,
   ThumbsUp,
   Edit3,
-  CheckSquare
+  CheckSquare,
+  Bell,
+  AlertCircle
 } from 'lucide-react';
 import { Calendar, dateFnsLocalizer, View, Views, ToolbarProps } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -52,6 +54,9 @@ import {
 import { BookingFormData, BookingStatus, BookingReview } from '../types';
 import { BookingRatingModal } from './BookingRatingModal';
 import { FieldTasksTab } from './FieldTasksTab';
+import { BookingLocationMap } from './BookingLocationMap';
+import { BookingCostBreakdownModal } from './BookingCostBreakdownModal';
+import { checkBookingReminder } from '../utils/reminderService';
 
 interface MyBookingsModalProps {
   isOpen: boolean;
@@ -60,6 +65,7 @@ interface MyBookingsModalProps {
   onDeleteBooking: (id: string) => void;
   onUpdateStatus: (id: string, status: BookingStatus) => void;
   onSaveReview?: (bookingId: string, review: BookingReview) => void;
+  initialBookingId?: string | null;
 }
 
 // Arabic Localizer Setup for react-big-calendar
@@ -239,16 +245,18 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
   bookings,
   onDeleteBooking,
   onUpdateStatus,
-  onSaveReview
+  onSaveReview,
+  initialBookingId = null
 }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'dashboard' | 'list' | 'tasks'>('calendar');
   const [calendarScope, setCalendarScope] = useState<'confirmed_only' | 'all'>('confirmed_only');
   const [filterStatus, setFilterStatus] = useState<'all' | BookingStatus>('all');
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(initialBookingId);
   const [statusNotification, setStatusNotification] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState<Date>(() => new Date());
   const [calendarView, setCalendarView] = useState<View>(Views.MONTH);
   const [ratingModalBooking, setRatingModalBooking] = useState<BookingFormData | null>(null);
+  const [costBreakdownBooking, setCostBreakdownBooking] = useState<BookingFormData | null>(null);
 
   if (!isOpen) return null;
 
@@ -1128,8 +1136,31 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
 
               {/* Selected Booking Quick Card */}
               {selectedBooking ? (
-                <div className="bg-gradient-to-br from-slate-50 to-emerald-50/40 border-2 border-emerald-300 rounded-2xl p-4 sm:p-5 shadow-md space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="flex items-center justify-between gap-2 border-b border-emerald-100 pb-3">
+                (() => {
+                  const quickReminder = checkBookingReminder(selectedBooking);
+                  return (
+                    <div className="bg-gradient-to-br from-slate-50 to-emerald-50/40 border-2 border-emerald-300 rounded-2xl p-4 sm:p-5 shadow-md space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                      {/* 24-Hour Reminder Alert Banner inside Quick Card */}
+                      {quickReminder && quickReminder.isWithin24Hours && (
+                        <div className="bg-gradient-to-r from-amber-500 via-rose-500 to-pink-600 text-white p-3 rounded-xl shadow-xs flex items-center justify-between gap-3 animate-pulse">
+                          <div className="flex items-center gap-2">
+                            <Bell className="w-4 h-4 text-white shrink-0" />
+                            <div>
+                              <span className="text-xs font-black block">
+                                تنبيه الجاهزية الميدانية: موعد الحفل خلال {quickReminder.hoursRemaining > 0 ? `${quickReminder.hoursRemaining} ساعة` : 'اليوم'}!
+                              </span>
+                              <span className="text-[11px] text-amber-100 block">
+                                موعد الحفل: {selectedBooking.eventDate} ({selectedBooking.eventTime}) • تم تدقيق الجاهزية وتجهيز أدوات التنسيق.
+                              </span>
+                            </div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-white/20 text-white font-mono font-bold text-[10px] shrink-0">
+                            تذكير 24H
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2 border-b border-emerald-100 pb-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[11px] font-mono font-black px-2 py-0.5 rounded-md bg-white text-slate-800 border border-slate-200">
                         {selectedBooking.id}
@@ -1215,10 +1246,32 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
                       <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                       <span>{selectedBooking.city} - {selectedBooking.addressDetails}</span>
                     </div>
-                    <div>
-                      <span className="text-slate-500">المبلغ التقديري: </span>
-                      <span className="font-black text-slate-900">{formatIQD(selectedBooking.totalEstimatedPrice)}</span>
+                    <div className="flex items-center justify-between sm:justify-start gap-2">
+                      <div>
+                        <span className="text-slate-500">المبلغ التقديري: </span>
+                        <span className="font-black text-slate-900">{formatIQD(selectedBooking.totalEstimatedPrice)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCostBreakdownBooking(selectedBooking)}
+                        className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        title="عرض توزيع التكاليف (Pie Chart)"
+                      >
+                        <PieChartIcon className="w-3 h-3 text-rose-600" />
+                        <span>توزيع التكاليف</span>
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Interactive Map Placeholder with Google Maps Action */}
+                  <div className="pt-1">
+                    <BookingLocationMap
+                      city={selectedBooking.city}
+                      addressDetails={selectedBooking.addressDetails}
+                      clientName={selectedBooking.clientName}
+                      eventType={selectedBooking.eventType}
+                      compact={true}
+                    />
                   </div>
 
                   {selectedBooking.specialNotes && (
@@ -1343,7 +1396,9 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
                     </div>
                   </div>
                 </div>
-              ) : (
+              );
+            })()
+          ) : (
                 <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-4 text-center text-xs text-slate-500">
                   💡 انقر على أي موعد في التقويم أعلاه لعرض التفاصيل وتحديث حالة الحجز أو التواصل عبر واتساب.
                 </div>
@@ -1379,12 +1434,34 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
                 const currentStatus = b.status || 'pending';
                 const config = STATUS_CONFIG[currentStatus] || STATUS_CONFIG.pending;
                 const StatusIcon = config.icon;
+                const reminderInfo = checkBookingReminder(b);
 
                 return (
                   <div
                     key={b.id}
                     className="bg-white border-2 border-slate-200 hover:border-slate-300 rounded-2xl p-4 sm:p-5 shadow-xs transition-all space-y-4"
                   >
+                    {/* 24-Hour Readiness Reminder Banner if within 24 hours */}
+                    {reminderInfo && reminderInfo.isWithin24Hours && (
+                      <div className="bg-gradient-to-r from-amber-500 to-rose-600 text-white p-3 rounded-xl shadow-xs flex items-center justify-between gap-3 animate-in fade-in">
+                        <div className="flex items-center gap-2">
+                          <Bell className="w-4 h-4 text-white animate-bounce shrink-0" />
+                          <div>
+                            <span className="text-xs font-black block">
+                              تنبيه الجاهزية: موعد الحفل خلال {reminderInfo.hoursRemaining > 0 ? `${reminderInfo.hoursRemaining} ساعة` : 'اليوم'}!
+                            </span>
+                            <span className="text-[11px] text-amber-100 block">
+                              يرجى مراجعة الموقع وتجهيز معدات الباقة قبل الوصول بساعتين.
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className="px-2 py-0.5 rounded-full bg-white/20 text-white font-mono font-bold text-[10px] shrink-0">
+                          24h Readiness
+                        </span>
+                      </div>
+                    )}
+
                     {/* Card Header: Client Name, ID & Current Status Badge */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
                       <div>
@@ -1502,6 +1579,15 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Event Location Map Placeholder & Google Maps Shortcut */}
+                    <BookingLocationMap
+                      city={b.city}
+                      addressDetails={b.addressDetails}
+                      clientName={b.clientName}
+                      eventType={b.eventType}
+                      compact={false}
+                    />
+
                     {b.specialNotes && (
                       <div className="text-xs bg-rose-50/50 rounded-lg p-2 text-slate-700 border border-rose-100 flex items-start gap-1.5">
                         <Info className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
@@ -1587,13 +1673,24 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
                     )}
 
                     {/* Card Footer: Price & Actions */}
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                      <div>
-                        <span className="text-[11px] text-slate-500">المبلغ التقديري: </span>
-                        <span className="font-black text-slate-900 text-sm">{formatIQD(b.totalEstimatedPrice)}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <span className="text-[11px] text-slate-500 block">المبلغ التقديري: </span>
+                          <span className="font-black text-slate-900 text-sm">{formatIQD(b.totalEstimatedPrice)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCostBreakdownBooking(b)}
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs mr-2"
+                          title="عرض توزيع تكاليف الحجز بالرسم البياني"
+                        >
+                          <PieChartIcon className="w-3.5 h-3.5 text-rose-600" />
+                          <span>توزيع التكاليف</span>
+                        </button>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => {
                             setSelectedBookingId(b.id);
@@ -1664,6 +1761,13 @@ export const MyBookingsModal: React.FC<MyBookingsModalProps> = ({
         onClose={() => setRatingModalBooking(null)}
         booking={ratingModalBooking}
         onSaveReview={handleSaveReview}
+      />
+
+      {/* Booking Cost Breakdown Visual Pie Chart Modal */}
+      <BookingCostBreakdownModal
+        isOpen={!!costBreakdownBooking}
+        onClose={() => setCostBreakdownBooking(null)}
+        booking={costBreakdownBooking}
       />
 
     </div>
